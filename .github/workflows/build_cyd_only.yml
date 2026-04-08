@@ -1,0 +1,90 @@
+---
+name: Build CYD-2432S028
+
+on:
+  push:
+    branches:
+      - copilot/check-bin-file-for-cyd
+      - main
+  workflow_dispatch:
+
+jobs:
+  build_cyd:
+    name: Build CYD-2432S028
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-multilib libc6-dev-i386
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-cyd
+          restore-keys: |
+            ${{ runner.os }}-pip-cyd
+            ${{ runner.os }}-pip-
+
+      - name: Cache PlatformIO framework
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-platformio-cyd-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-cyd-${{ hashFiles('platformio.ini') }}
+            ${{ runner.os }}-platformio-cyd-
+            ${{ runner.os }}-platformio-
+
+      - name: Cache PlatformIO libraries
+        uses: actions/cache@v4
+        with:
+          path: .pio/libdeps/CYD-2432S028
+          key: ${{ runner.os }}-pio-CYD-2432S028-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-CYD-2432S028-${{ hashFiles('platformio.ini') }}
+            ${{ runner.os }}-pio-CYD-2432S028-
+
+      - name: Install PlatformIO
+        run: pip install requests esptool intelhex platformio
+
+      - name: Set version
+        id: version
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Compile CYD-2432S028
+        run: |
+          set -o pipefail
+          sed -i "s/-DBRUCE_VERSION=/-DBRUCE_VERSION='\"${{ steps.version.outputs.version }}\"' ; /g" ./platformio.ini
+          platformio run -e CYD-2432S028
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bruce-CYD-2432S028
+          path: Bruce-CYD-2432S028.bin
+          if-no-files-found: error
+
+      - name: Upload to betaRelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: betaRelease
+          prerelease: true
+          files: Bruce-CYD-2432S028.bin
+          fail_on_unmatched_files: false
+          make_latest: false
+          generate_release_notes: false
